@@ -44,10 +44,10 @@ solution = ExactSolution()
 def sector_hard_bc_singular(xy):
     """ 遮罩: 確保 u = 0 on boundary (強制滿足邊界) """
     x, y = xy[:, 0:1], xy[:, 1:2]
-    r = torch.sqrt(x**2 + y**2 + 1e-12)
+    r_square = x**2 + y**2 + 1e-12
     theta = torch.atan2(y, x)
     theta = torch.where(theta < 0, theta + 2*np.pi, theta)
-    return (1-r) * (r**(2/3)) * theta * (1.5 * np.pi - theta)
+    return (1-r_square) * (r**(2/3)) * theta * (1.5 * np.pi - theta)
 
 # ==========================================
 # 2. 模型 (保持不變)

@@ -25,8 +25,8 @@ Create and activate a Python virtual environment, then install dependencies.
 
 ### macOS / Linux
 ```bash
-python -m venv venv
-source venv/bin/activate
+python -m venv venv_hypotenuse_loss
+source venv_hypotenuse_loss/bin/activate
 pip install -r requirements.txt
 Windows (PowerShell)
 powershell
