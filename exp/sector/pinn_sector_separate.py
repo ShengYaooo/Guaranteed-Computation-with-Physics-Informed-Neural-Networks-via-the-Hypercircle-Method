@@ -49,21 +49,16 @@ def sector_hard_bc_singular(xy):
     theta = torch.where(theta < 0, theta + 2*np.pi, theta)
     return (1-r) * (r**(2/3)) * theta * (1.5 * np.pi - theta)
 
-def forcing_f_from_qpart(xy):
+def forcing_f(xy):
     """
-    已知 div(q) = -f 且 q = q_part + curl(psi)
-    div(curl)=0 => div(q)=div(q_part)
-    => f = -div(q_particular)
+    Analytical forcing: f = -sin(2θ/3) * (2r^(2/3) + 14/3 * (r-1) * r^(-1/3))
+    Derived from -Δu where u = (r-1)^2 * r^(2/3) * sin(2θ/3).
     """
-    if not xy.requires_grad:
-        xy.requires_grad_(True)
-    qpx, qpy = solution.q_particular(xy)
-
-    dqpx = torch.autograd.grad(qpx, xy, torch.ones_like(qpx), create_graph=True)[0]
-    dqpy = torch.autograd.grad(qpy, xy, torch.ones_like(qpy), create_graph=True)[0]
-    div_qp = dqpx[:, 0:1] + dqpy[:, 1:2]
-    f = -div_qp
-    return f
+    x, y = xy[:, 0:1], xy[:, 1:2]
+    r = torch.sqrt(x**2 + y**2 + 1e-12)
+    theta = torch.atan2(y, x)
+    theta = torch.where(theta < 0, theta + 2*np.pi, theta)
+    return -torch.sin(2.0 * theta / 3.0) * (2.0 * r**(2.0/3.0) + 14.0/3.0 * (r - 1.0) * r**(-1.0/3.0))
 
 # ==========================================
 # 2. 模型
@@ -133,7 +128,7 @@ def train_primal_pde(primal, xy_train, iters=10001, lr=1e-3):
 
         u = primal(xy_train)
         lap_u = laplacian_u(u, xy_train)
-        f = forcing_f_from_qpart(xy_train)
+        f = forcing_f(xy_train)
 
         res = lap_u + f
         loss = torch.mean(res**2)
