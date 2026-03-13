@@ -130,7 +130,7 @@ def train_jointly(primal, dual, xy_train, epochs=5000):
 # ==========================================
 if __name__ == "__main__":
     # 1. Generate Training Data (Uniform sampling in disk)
-    N_samples = 8000
+    N_samples = 8000 # Less than 1 min expected for N_samples=8000
     r_samp = torch.sqrt(torch.rand(N_samples, 1, device=device))
     theta_samp = 2 * np.pi * torch.rand(N_samples, 1, device=device)
     x_samp = r_samp * torch.cos(theta_samp)

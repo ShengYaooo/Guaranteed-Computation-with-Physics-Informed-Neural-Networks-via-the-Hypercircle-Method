@@ -1,0 +1,33 @@
+# ---- core scientific stack ----
+numpy
+scipy
+sympy
+matplotlib
+mpmath
+
+# ---- utilities ----
+packaging
+python-dateutil
+typing_extensions
+psutil
+pillow
+networkx
+
+# ---- plotting deps (matplotlib often pulls these, but keeping explicit is fine) ----
+contourpy
+cycler
+fonttools
+kiwisolver
+pyparsing
+
+# ---- templating (if your project uses it) ----
+Jinja2
+MarkupSafe
+
+# ---- FEM (your list included it) ----
+scikit-fem
+
+# ---- PyTorch (macOS CPU/MPS) ----
+torch
+torchvision
+torchaudio
