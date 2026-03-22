@@ -1,0 +1,123 @@
+% --- 核心文獻 (Core References) ---
+
+@article{raissi2019,
+  title={Physics-informed neural networks: A deep learning framework for solving forward and inverse problems involving nonlinear partial differential equations},
+  author={Raissi, Maziar and Perdikaris, Paris and Karniadakis, George Em},
+  journal={Journal of Computational Physics},
+  volume={378},
+  pages={686--707},
+  year={2019},
+  publisher={Elsevier}
+}
+@book{liu2023guaranteed,
+  title={Guaranteed Computational Methods for Self-Adjoint Differential Eigenvalue Problems},
+  author={Liu, Xuefeng},
+  year={2023},
+  publisher={Springer},
+  note={See page 10 for the benchmark problem definition}
+}
+@article{prager1947,
+  title={Approximations in elasticity based on the concept of function space},
+  author={Prager, William and Synge, John L},
+  journal={Quarterly of Applied Mathematics},
+  volume={5},
+  number={3},
+  pages={241--269},
+  year={1947}
+}
+
+@book{grisvard1985,
+  title={Elliptic Problems in Nonsmooth Domains},
+  author={Grisvard, Pierre},
+  series={Monographs and Studies in Mathematics},
+  volume={24},
+  year={1985},
+  publisher={Pitman},
+  address={Boston}
+}
+
+@book{strang1973,
+  title={An Analysis of the Finite Element Method},
+  author={Strang, Gilbert and Fix, George J},
+  year={1973},
+  publisher={Prentice-Hall},
+  address={Englewood Cliffs, NJ}
+}
+
+% --- 關於 PINN 優化困難與 Spectral Bias (Introduction/Related Work) ---
+
+@article{wang2021understanding,
+  title={Understanding and mitigating gradient flow pathologies in physics-informed neural networks},
+  author={Wang, Sifan and Teng, Yujun and Perdikaris, Paris},
+  journal={SIAM Journal on Scientific Computing},
+  volume={43},
+  number={5},
+  pages={A3055--A3081},
+  year={2021},
+  publisher={SIAM}
+}
+
+@inproceedings{rahaman2019spectral,
+  title={On the spectral bias of neural networks},
+  author={Rahaman, Nasim and Baratin, Aristide and Arpit, Devansh and Draxler, Felix and Lin, Min and Hamprecht, Fred and Bengio, Yoshua and Courville, Aaron},
+  booktitle={International Conference on Machine Learning},
+  pages={5301--5310},
+  year={2019},
+  organization={PMLR}
+}
+
+@article{karniadakis2021physics,
+  title={Physics-informed machine learning},
+  author={Karniadakis, George Em and Kevrekidis, Ioannis G and Lu, Lu and Perdikaris, Paris and Wang, Sifan and Yang, Liu},
+  journal={Nature Reviews Physics},
+  volume={3},
+  number={6},
+  pages={422--440},
+  year={2021},
+  publisher={Nature Publishing Group}
+}
+
+% --- 關於 Hard Constraints (Related Work) ---
+
+@article{berg2018unified,
+  title={A unified deep artificial neural network approach to partial differential equations in complex geometries},
+  author={Berg, Jens and Nystr{\"o}m, Kaj},
+  journal={Neurocomputing},
+  volume={317},
+  pages={28--41},
+  year={2018},
+  publisher={Elsevier}
+}
+
+@article{lagaris1998artificial,
+  title={Artificial neural networks for solving ordinary and partial differential equations},
+  author={Lagaris, Isaac E and Likas, Aristidis and Fotiadis, Dimitrios I},
+  journal={IEEE Transactions on Neural Networks},
+  volume={9},
+  number={5},
+  pages={987--1000},
+  year={1998},
+  publisher={IEEE}
+}
+
+% --- 關於 Mixed PINN (對比優勢) ---
+
+@article{lyu2022mim,
+  title={MIM: Mimetic physics-informed neural networks},
+  author={Lyu, Liyao and Wu, Kailiang and Du, Qiang and Chen, Zhangxin},
+  journal={Journal of Computational Physics},
+  volume={461},
+  pages={111221},
+  year={2022},
+  publisher={Elsevier}
+}
+
+% --- 關於 FEM 後驗誤差估計 (數值分析證明) ---
+
+@book{ainsworth2000posteriori,
+  title={A Posteriori Error Estimation in Finite Element Analysis},
+  author={Ainsworth, Mark and Oden, J Tinsley},
+  year={2000},
+  publisher={Wiley-Interscience},
+  address={New York}
+}

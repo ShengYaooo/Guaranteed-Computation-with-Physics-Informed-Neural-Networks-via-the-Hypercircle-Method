@@ -1,0 +1,461 @@
+\documentclass[12pt, a4paper]{article}
+
+% --------------------------------------------------
+% Packages
+% --------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\geometry{top=2.5cm, bottom=2.5cm, left=2.5cm, right=2.5cm}
+
+\usepackage{amsmath, amssymb, amsthm} % Math symbols
+\usepackage{graphicx}                   % Images
+\usepackage{booktabs}                   % Tables
+\usepackage{hyperref}                   % Hyperlinks
+\usepackage{float}                      % Image placement
+\usepackage{caption}                    % Captions
+\usepackage{subcaption}                 % Sub-captions
+\usepackage{xcolor}                     % Colors for TODOs
+\usepackage{url}
+\usepackage{hyperref}
+
+
+% 允許在網址的連字號、底線、斜線等地方換行
+\def\UrlBreaks{\do\/\do-\do\_\do\.\do\:}
+
+% --------------------------------------------------
+% Custom Definitions
+% --------------------------------------------------
+\DeclareMathOperator{\rot}{rot}
+\DeclareMathOperator{\divg}{div}
+\newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO: #1]}}}
+
+% --------------------------------------------------
+% Title & Author
+% --------------------------------------------------
+\title{\textbf{Strict Error Control in Physics-Informed Neural Networks via the Hypercircle Method}}
+
+\author{
+    PingTing Hsieh\thanks{These authors contributed equally to this work.} \\
+    Department of Mathematics \\
+    National Cheng Kung University \\
+    \texttt{jeffshieh0624@gmail.com}
+    \and
+    ShengYao Huang\footnotemark[1] \\
+    Department of Mathematics \\
+    National Cheng Kung University \\
+    \texttt{yao20040506@gmail.com}
+}
+
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+% --------------------------------------------------
+% Abstract
+% --------------------------------------------------
+\begin{abstract}
+While Physics-Informed Neural Networks (PINNs) have shown great promise in scientific computing, they fundamentally lack rigorous, computable error guarantees, limiting their adoption in safety-critical applications. In this work, we propose a novel deep learning framework rooted in the classical Hypercircle method (Prager-Synge theorem) to provide strict \textit{a posteriori} error bounds. 
+By constructing dual neural architectures that strictly enforce kinematic and static admissibility via distance masks and curl operators, we derive a unified "Hypotenuse Loss." 
+This objective function not only minimizes the energy error norm directly but also achieves \textbf{order reduction}, bypassing the computationally expensive second-order derivative calculations required by standard PINNs. 
+Furthermore, we address geometric singularities in non-smooth domains (e.g., L-shaped geometries) by explicitly enriching the ansatz space with asymptotic singular basis functions. 
+Numerical experiments confirm that our framework yields rigorous upper bounds on the solution error and significantly outperforms baseline methods in both convergence rate and computational efficiency.
+
+\vspace{1em}
+\noindent \textbf{Keywords:} Physics-Informed Neural Networks, Hypercircle Method, A Posteriori Error Estimation, Hypotenuse Loss, Singularity Enrichment.
+\end{abstract}
+
+% --------------------------------------------------
+% 1. Introduction
+% --------------------------------------------------
+\section{Introduction}
+
+Physics-Informed Neural Networks (PINNs) represent a paradigm shift in scientific computing, merging the universal approximation capabilities of deep learning with the rigor of mathematical physics \cite{raissi2019, karniadakis2021physics}. By encoding governing equations as residual terms in the loss function, PINNs offer a mesh-free, unified framework for solving forward and inverse problems across fluid dynamics, solid mechanics, and beyond.
+
+Despite their empirical success, the deployment of PINNs in safety-critical engineering applications remains hindered by two fundamental bottlenecks:
+\begin{enumerate}
+    \item \textbf{Absence of Certifiable Error Bounds}: Standard PINNs rely on ``soft constraints,'' minimizing residuals merely in a statistical or mean-squared sense. Consequently, the resulting solutions satisfy neither the boundary conditions nor the governing equations strictly. Crucially, conventional frameworks lack a rigorous \textit{a posteriori} error estimator, leaving practitioners without a theoretical guarantee on the distance between the neural approximation and the exact solution.
+    \item \textbf{Optimization Complexity via High-Order Derivatives}: The training of residual-based PINNs typically requires computing second-order derivatives (e.g., the Laplacian) via Automatic Differentiation (AD). This not only significantly increases the computational cost of backpropagation but also exacerbates spectral bias \cite{rahaman2019spectral}, as high-order differential operators tend to amplify high-frequency noise and lead to gradient pathologies \cite{wang2021understanding}, complicating the optimization landscape.
+\end{enumerate}
+
+To overcome these challenges, we revisit a classical geometric principle from functional analysis: the \textbf{Hypercircle Method}, originally established by Prager and Synge \cite{prager1947}.  This method exploits the Hilbert space structure of elliptic problems, where the exact solution gradient $\nabla u$ is uniquely characterized as the intersection of two orthogonal affine subspaces: the space of kinematically admissible fields (satisfying compatibility and boundary conditions) and the space of statically admissible fields (satisfying equilibrium).
+
+In this work, we present a novel deep learning framework that seamlessly integrates this classical variational principle. Our specific contributions are:
+\begin{itemize}
+    \item \textbf{Strict Admissibility by Architecture}: We construct specific neural architectures that guarantee admissibility \textit{by design}. By employing distance-based masking for the primal network and a curl-based formulation for the dual network, we ensure that candidate solutions strictly reside within their respective subspaces throughout the training process.
+    \item \textbf{Order Reduction via the Hypotenuse Loss}: We introduce the ``Hypotenuse Loss,'' a unified objective function that minimizes the energy distance (the hypercircle diameter) between the primal and dual fields. This formulation serves as a computable, rigorous upper bound for the true error and, critically, reduces the training requirement from second-order to first-order derivatives, enhancing both numerical stability and training speed.
+    \item \textbf{Geometric Singularity Enrichment}: Addressing the limitations of spectral bias in non-smooth domains, we extend the framework to L-shaped geometries. We incorporate singular basis functions derived from asymptotic analysis directly into the network ansatz, enabling the accurate capture of infinite gradients at re-entrant corners without mesh refinement.
+\end{itemize}
+
+The remainder of this paper is organized as follows: Section 2 reviews related work; Section 3 establishes the mathematical foundation of the Hypercircle identity; Section 4 details our methodology for constructing admissible neural fields; Section 5 addresses the generalization to complex source terms and singularities; and Section 6 provides numerical validations.
+
+% --------------------------------------------------
+% 2. Related Work
+% --------------------------------------------------
+\section{Related Work}
+
+The convergence of deep learning and scientific computing has led to a proliferation of neural PDE solvers. Our work sits at the intersection of three research thrusts: Physics-Informed Neural Networks, admissible neural architectures, and a posteriori error estimation.
+
+\subsection{Physics-Informed Neural Networks (PINNs)}
+Since the seminal work of Raissi et al. \cite{raissi2019}, PINNs have demonstrated remarkable versatility in solving forward and inverse problems. However, standard PINNs typically formulate the PDE residual as a soft penalty in the loss function. This formulation suffers from two intrinsic limitations: (1) \textbf{Lack of Guarantees}: The resulting solutions satisfy neither the governing equations nor the boundary conditions strictly, yielding approximations with uncontrolled errors. (2) \textbf{Optimization Pathology}: The reliance on high-order automatic differentiation (e.g., computing the Laplacian) exacerbates the \textit{spectral bias} phenomenon\cite{rahaman2019spectral}, where networks struggle to learn high-frequency components due to the amplification of gradient noise, often requiring intricate hyperparameter tuning or adaptive weighting schemes to converge.
+
+\subsection{Hard Constraints and Admissible Architectures}
+To mitigate the limitations of soft constraints, recent studies have explored embedding physical laws directly into the neural architecture\cite{lagaris1998artificial}. For kinematic admissibility, Berg and Nyström \cite{berg2018unified} proposed distance-based ansatzes to strictly enforce Dirichlet boundary conditions. On the static side, various "Mixed PINN"(e.g., MIM \cite{lyu2022mim}) formulations have been proposed to solve for stress/flux variables simultaneously. However, most existing mixed approaches fundamentally differ from ours: they typically treat the equilibrium equation ($\nabla \cdot \mathbf{p} + f = 0$) as an additional residual term to be minimized, rather than a structural identity to be satisfied. Consequently, they fail to guarantee \textit{static admissibility} in the strict sense required by the Prager-Synge theorem, rendering rigorous error estimation impossible.
+
+\subsection{A Posteriori Error Estimation and the Hypercircle Method}
+In classical numerical analysis, the Hypercircle method \cite{prager1947} serves as a theoretical cornerstone for a posteriori error estimation. It provides a guaranteed error upper bound by constructing a dual statically admissible field. While mathematically elegant, its application in Finite Element Methods (FEM) is computationally nontrivial. Constructing an exactly equilibrated flux field from a standard FEM displacement solution often requires expensive post-processing techniques (e.g., solving local Neumann problems on element patches via the Ainsworth-Oden estimator\cite{ainsworth2000posteriori}). By leveraging the mesh-free nature of neural networks and the differential exactness of the curl operator, our approach revitalizes this classical method, offering a seamless framework for strict error control that bypasses the topological complexities of mesh-based flux recovery.
+
+% --------------------------------------------------
+% 3. Preliminaries
+% --------------------------------------------------
+\section{Mathematical Preliminaries}
+\subsection{Problem Formulation}
+Based on the classical framework established by Prager and Synge \cite{prager1947}, Let $\Omega \subset \mathbb{R}^2$ be a bounded domain with boundary $\partial \Omega$. We consider the Poisson problem with Dirichlet boundary conditions:
+\begin{equation}
+    \begin{cases}
+    -\Delta u = f & \text{in } \Omega, \\
+    u = 0 & \text{on } \partial \Omega,
+    \end{cases}
+\end{equation}
+where $f \in L^2(\Omega)$ is a given source term and $u$ is the unknown scalar field.
+
+\subsection{The Hypercircle Theorem}
+Let $\Omega$ be a bounded domain in $\mathbb{R}^2$. We define the energy inner product for vector fields $\mathbf{a}, \mathbf{b}$ as $\langle \mathbf{a}, \mathbf{b} \rangle = \int_{\Omega} \mathbf{a} \cdot \mathbf{b} \, d\Omega$, and the associated norm $\| \mathbf{a} \| = \sqrt{\langle \mathbf{a}, \mathbf{a} \rangle}$.
+
+Let $u$ be the exact solution to the Poisson problem. We define two admissible sets of functions:
+\begin{enumerate}
+    \item \textbf{Kinematically Admissible Set} $\mathcal{K}$: The set of scalar functions $v \in H^1(\Omega)$ (i.e., both $v$ and its gradient $\nabla v$ have finite $L^2$ norms in $\Omega$) satisfying the essential boundary conditions ($v = 0$ on $\partial \Omega$).
+    \item \textbf{Statically Admissible Set} $\mathcal{S}$: The set of vector fields $\mathbf{p}$ satisfying the equilibrium equation $\divg \mathbf{p} + f = 0$.
+\end{enumerate}
+
+The exact solution gradient $\nabla u$ lies in the intersection of the gradient of $\mathcal{K}$ and $\mathcal{S}$ (i.e., $\nabla u \in \nabla \mathcal{K} \cap \mathcal{S}$).
+
+A key property of these sets is their orthogonality with respect to the exact solution. Consider the error fields $\mathbf{e}_v = \nabla v - \nabla u$ and $\mathbf{e}_p = \mathbf{p} - \nabla u$. Since $v, u \in \mathcal{K}$, the difference $\eta = v - u$ vanishes on the boundary. Since $\mathbf{p}, \nabla u \in \mathcal{S}$, the difference $\boldsymbol{\tau} = \mathbf{p} - \nabla u$ is divergence-free ($\divg \boldsymbol{\tau} = -f - (-f) = 0$).
+
+By Green's first identity, the inner product of these errors vanishes:
+\begin{equation}
+    \langle \nabla v - \nabla u, \mathbf{p} - \nabla u \rangle = \int_{\Omega} \nabla (v-u) \cdot (\mathbf{p} - \nabla u) \, d\Omega = - \int_{\Omega} (v-u) \underbrace{\divg (\mathbf{p} - \nabla u)}_{0} \, d\Omega = 0.
+\end{equation}
+
+This orthogonality implies that the primal error vector and the dual error vector are perpendicular in the energy space. Applying the Pythagorean theorem yields the \textbf{Hypercircle Identity}:
+\begin{equation} \label{eq:hypercircle_main}
+    \underbrace{\| \nabla v - \mathbf{p} \|^2}_{\text{Hypercircle Diameter}^2} = \underbrace{\| \nabla v - \nabla u \|^2}_{\text{Primal Error}^2} + \underbrace{\| \mathbf{p} - \nabla u \|^2}_{\text{Dual Error}^2}.
+\end{equation}
+
+Geometrically, the exact solution $\nabla u$ lies on a hypercircle (hypersphere) with diameter connecting $\nabla v$ and $\mathbf{p}$. Consequently, the distance $\| \nabla v - \mathbf{p} \|$ serves as a computable, strict upper bound for the error of the primal solution:
+\begin{equation}
+    \| \nabla v - \nabla u \| \le \| \nabla v - \mathbf{p} \|.
+\end{equation}
+
+% --------------------------------------------------
+% 4. Methodology: The Unit Disk Case (基礎方法)
+% --------------------------------------------------
+\section{Methodology: The Unit Disk Case}
+In this section, we establish our framework using a fundamental benchmark: the Poisson equation on a unit disk with a constant source term ($f=1$).
+
+\subsection{Construction of Admissible Fields}
+To apply the Hypercircle theorem, we must construct two distinct neural networks that strictly satisfy the respective admissibility conditions by design.
+
+\subsubsection{Primal Model (Kinematic Admissibility)}
+The primal solution $v$ must satisfy the Dirichlet boundary condition $u|_{\partial \Omega} = 0$. Instead of using a soft penalty loss for the boundary, we employ a \textbf{Distance Mask} to enforce strict adherence, a technique originally proposed by Lagaris et al. \cite{lagaris1998artificial} and recently extended to complex geometries \cite{berg2018unified}.. For a unit disk, the distance function is $d(\mathbf{x}) = 1 - \|\mathbf{x}\|$. We define the primal network structure as:
+\begin{equation}
+    v(\mathbf{x}) = (1 - \|\mathbf{x}\|) \cdot \mathcal{N}_v(\mathbf{x}; \theta_v)
+\end{equation}
+This construction guarantees that $v(\mathbf{x})$ vanishes exactly on the boundary regardless of the network weights $\theta_v$.
+
+To train this primal network independently (before coupling it with the dual model), we minimize the residual of the Poisson equation. The loss function is defined as the $L^2$ norm of the PDE residual:
+\begin{equation} \label{eq:primal_loss}
+    \mathcal{L}_{primal}(\theta_v) = \| \Delta v + f \|^2_{L^2} = \int_{\Omega} | \Delta v(\mathbf{x}) + f(\mathbf{x}) |^2 d\mathbf{x}
+\end{equation}
+Minimizing $\mathcal{L}_{primal}$ drives $v$ to satisfy the governing equation inside the domain, while the architecture ensures boundary compliance.
+
+\subsubsection{Dual Model (Static Admissibility)}
+The dual vector field $\mathbf{p}$ must satisfy the equilibrium equation $\divg \mathbf{p} = -f$. For the case $f=1$, we decompose $\mathbf{p}$ into a particular solution $\mathbf{p}_p$ and a homogeneous solution $\mathbf{p}_h$:
+\begin{equation}
+    \mathbf{p} = \mathbf{p}_p + \mathbf{p}_h
+\end{equation}
+We choose an analytical particular solution $\mathbf{p}_p = [-x/2, -y/2]^T$ such that $\divg \mathbf{p}_p = -1$.
+The homogeneous part $\mathbf{p}_h$ must satisfy $\divg \mathbf{p}_h = 0$. We achieve this by defining a potential function $\phi$ via a second neural network $\mathcal{N}_\phi$ and applying the \textbf{Rot Operator}, drawing inspiration from mimetic neural network approaches \cite{lyu2022mim}:
+\begin{equation}
+    \mathbf{p}_h = \rot(\mathcal{N}_\phi) = \begin{bmatrix} \partial_y \mathcal{N}_\phi \\ -\partial_x \mathcal{N}_\phi \end{bmatrix}
+\end{equation}
+By vector identity, $\divg(\rot(\phi)) \equiv 0$, ensuring that $\divg \mathbf{p} = -1$ holds exactly by construction.
+
+To train this dual network independently, we invoke the \textbf{Principle of Minimum Complementary Energy}. Among all statically admissible fields, the physically correct field minimizes the total energy. Thus, the loss function is defined as the squared $L^2$ norm of the vector field $\mathbf{p}$:
+\begin{equation} \label{eq:dual_loss}
+    \mathcal{L}_{dual}(\theta_\phi) = \| \mathbf{p} \|^2_{L^2} = \int_{\Omega} \| \mathbf{p}_p + \rot(\mathcal{N}_\phi) \|^2 d\mathbf{x}
+\end{equation}
+Minimizing $\mathcal{L}_{dual}$ drives the constructed flux field towards the state of minimum energy while maintaining strict equilibrium..
+
+\subsection{Verification of Admissibility and Strict Error Bound}
+To guarantee that the Hypercircle theorem applies, we explicitly verify that our neural network constructions satisfy the required subspace conditions.
+
+\paragraph{1. Verification of Kinematic Admissibility ($v \in \mathcal{K}$)}
+The primal network is defined as $v(\mathbf{x}) = d(\mathbf{x}) \cdot \mathcal{N}_v(\mathbf{x})$.
+\begin{itemize}
+    \item \textbf{Boundary Condition}: Since the distance mask $d(\mathbf{x})$ vanishes exactly on the boundary ($d|_{\partial \Omega} = 0$), it follows that $v|_{\partial \Omega} = 0$.
+    \item \textbf{Regularity}: With smooth activation functions (e.g., Tanh or Sigmoid), $\mathcal{N}_v$ is $C^\infty$. Since $d(\mathbf{x})$ is continuous and bounded, $v$ belongs to the Sobolev space $H^1(\Omega)$.
+\end{itemize}
+Thus, the constructed primal field satisfies $v \in \mathcal{K}$.
+
+\paragraph{2. Verification of Static Admissibility ($\mathbf{p} \in \mathcal{S}$)}
+The dual network is defined as $\mathbf{p} = \mathbf{p}_p + \rot(\mathcal{N}_\phi)$. Computing the divergence:
+\begin{equation}
+    \divg \mathbf{p} = \divg \mathbf{p}_p + \divg(\rot(\mathcal{N}_\phi)).
+\end{equation}
+\begin{itemize}
+    \item By our choice of the particular solution, $\divg \mathbf{p}_p = -f$.
+    \item By the vector identity $\divg(\rot(\cdot)) \equiv 0$, the second term vanishes identically.
+\end{itemize}
+Consequently, $\divg \mathbf{p} = -f$ holds strictly, ensuring $\mathbf{p} \in \mathcal{S}$.
+
+\paragraph{Conclusion: Guaranteed Error Bounds}
+Since $v \in \mathcal{K}$ and $\mathbf{p} \in \mathcal{S}$, the orthogonality condition $\langle \nabla v - \nabla u, \mathbf{p} - \nabla u \rangle = 0$ is guaranteed by the Hypercircle theorem. By the Pythagorean identity $\| \nabla v - \mathbf{p} \|^2 = \| \nabla v - \nabla u \|^2 + \| \mathbf{p} - \nabla u \|^2$, the distance between the two network outputs (the "hypotenuse") serves as a rigorous upper bound for \textbf{both} the primal error and the dual error:
+\begin{equation}
+    \| \nabla v - \nabla u \| \le \| \nabla v - \mathbf{p} \| \quad \text{and} \quad \| \mathbf{p} - \nabla u \| \le \| \nabla v - \mathbf{p} \|.
+\end{equation}
+This allows us to evaluate the reliability of both the primal solution $v$ and the dual flux $\mathbf{p}$ simultaneously without knowing the exact solution $u$.
+
+\subsection{Unified Training Strategy: The Hypotenuse Loss}
+Initially, one might train $\mathcal{N}_v$ and $\mathcal{N}_\phi$ separately using residual losses (e.g., $\|\Delta v + f\|^2$). However, this requires calculating second-order derivatives, which is computationally expensive.
+
+We propose a unified training approach using the \textbf{Hypotenuse Loss}:
+\begin{equation}
+    \mathcal{L}_{total} = \| \nabla v - \mathbf{p} \|^2 = \int_{\Omega} | \nabla (1 - \|\mathbf{x}\|) \cdot \mathcal{N}_v(\mathbf{x}; \theta_v) - (\mathbf{p}_p + \rot(\mathcal{N}_\phi) |^2 d\Omega
+\end{equation}
+Minimizing this loss:
+\begin{enumerate}
+    \item Forces the primal gradient $\nabla v$ and dual flux $\mathbf{p}$ to converge towards each other (and thus towards the true solution $\nabla u$).
+    \item \textbf{Reduces Order}: Requires only first-order derivatives ($\nabla v$ and $\rot \phi$), significantly speeding up training.
+\end{enumerate}
+
+% --------------------------------------------------
+% 5. Generalization: Singularities and General Sources (進階推廣)
+% --------------------------------------------------
+\section{Generalization to Complex Scenarios}
+In this section, we extend the proposed framework to handle general source terms ($f \neq 1$) and domains with geometric singularities (e.g., L-shaped domain).
+
+\subsection{Handling General Source Terms}
+The strict application of the Hypercircle method requires a particular flux $\mathbf{p}_p$ that satisfies $\divg \mathbf{p}_p = -f$ exactly. We propose two strategies to construct this field depending on the complexity of the source term $f(\mathbf{x})$:
+
+\begin{enumerate}
+    \item \textbf{Sources Admitting Closed-Form Solutions}:
+    If $f$ is an \textbf{analytically integrable function} (e.g., polynomials, trigonometric functions, exponentials, or their combinations), $\mathbf{p}_p$ can be derived explicitly via symbolic integration. For instance, a valid particular solution can be constructed as $\mathbf{p}_p(x,y) = [-\int f(x,y) dx, \, 0]^T$. This ensures that the divergence constraint is met with machine precision.
+
+    \item \textbf{Complex or Black-Box Sources}:
+    For scenarios where $f$ does not admit a simple closed-form antiderivative, we employ a \textbf{Numerical Particular Solution}. An auxiliary neural network $\mathcal{N}_{aux}$ is pre-trained to minimize the residual $\| \divg \mathcal{N}_{aux} + f \|^2$. While this approach slightly relaxes strict admissibility, it extends the framework's applicability to arbitrary or data-driven source terms.
+\end{enumerate}
+
+\subsection{Singularity Enrichment for L-Shaped Domains}
+For domains with re-entrant corners (e.g., an L-shape with a corner at the origin), the exact solution $u$ loses regularity ($u \in H^1$ but $u \notin H^2$), and the gradient becomes singular ($\nabla u \to \infty$ as $r \to 0$). Standard neural networks with smooth activation functions struggle to approximate this unbounded behavior, often leading to significant errors near the corner.
+
+To address this, we employ an asymptotic expansion strategy. It is worth noting that incorporating any singular term $r^\lambda$ (where $1/2 < \lambda < 1$) into the trial space generally alleviates the training difficulty by allowing the network to represent steep gradients. However, the optimal convergence rate is achieved when the exponent matches the theoretical singularity of the operator.
+
+For the L-shaped domain, the re-entrant corner has an angle of $\omega = \frac{3\pi}{2}$. According to the elliptic regularity theory for non-smooth domains \cite{grisvard1985, strang1973}, the leading term of the solution behaves as $r^{\pi/\omega}$. Therefore, we specifically choose $\lambda = \frac{\pi}{3\pi/2} = \frac{2}{3}$ and define the \textbf{Singular Mask} as:
+\begin{equation}
+    v(\mathbf{x}) = r^{2/3} \cdot (1 - \tilde{d}(\mathbf{x})) \cdot \mathcal{N}_v(\mathbf{x}).
+\end{equation}
+This term $r^{2/3}$ explicitly introduces the correct singularity, effectively decoupling the singular behavior from the smooth part of the solution, which is then easily learned by the neural network $\mathcal{N}_v$.
+
+% --------------------------------------------------
+% 6. Numerical Experiments (實驗結果)
+% --------------------------------------------------
+\section{Numerical Experiments}
+
+\subsection{Validation on Unit Disk}
+We validate the proposed Hypercircle-based training on the Poisson problem over the unit disk $\Omega=\{\mathbf{x} \in \mathbb{R}^2 : \|\mathbf{x}\| < 1\}$:
+\begin{equation}
+    \begin{cases}
+    -\Delta u = 1 & \text{in } \Omega, \\
+    u = 0 & \text{on } \partial \Omega.
+    \end{cases}
+\end{equation}
+This benchmark admits the exact solution:
+\begin{equation}
+    u(\mathbf{x}) = \frac{1 - \|\mathbf{x}\|^2}{4}, \qquad \nabla u(\mathbf{x}) = \left( -\frac{x}{2}, -\frac{y}{2} \right),
+\end{equation}
+which we use only for post-training evaluation.
+
+\paragraph{Admissible Parameterizations.}
+To satisfy the Dirichlet boundary condition \emph{exactly}, we enforce a hard constraint via a distance mask. Let the primal approximation be $v$:
+\begin{equation}
+    v(\mathbf{x}) = d(\mathbf{x}) \cdot \mathcal{N}_v(\mathbf{x}; \theta), \qquad d(\mathbf{x}) = 1 - \|\mathbf{x}\|^2,
+\end{equation}
+so that $v|_{\partial\Omega} = 0$ regardless of the network parameters $\theta$.
+For the dual flux $\mathbf{p}$, we use an exactly equilibrated construction:
+\begin{equation}
+    \mathbf{p}(\mathbf{x}) = \mathbf{p}_p(\mathbf{x}) + \mathbf{p}_h(\mathbf{x}) = \mathbf{p}_p(\mathbf{x}) + \rot(\mathcal{N}_\phi(\mathbf{x}; \eta)),
+\end{equation}
+where $\mathcal{N}_\phi$ is a scalar neural network (representing the potential $\phi$) and the particular solution is chosen as $\mathbf{p}_p(\mathbf{x}) = [-x/2, -y/2]^T$.
+Since $\divg(\rot(\phi)) \equiv 0$ and $\divg \mathbf{p}_p = -1$, this guarantees:
+\begin{equation}
+    \divg \mathbf{p} = -1
+\end{equation}
+\emph{by construction}, without introducing any divergence-penalty term.
+
+\paragraph{Compared Training Strategies.}
+We compare two approaches:
+\begin{itemize}
+    \item \textbf{Separate Training.}
+    The primal network is trained by minimizing the strong-form PDE residual:
+    \begin{equation}
+        \mathcal{L}_{\text{PDE}}(\theta) = \| \Delta v + 1 \|^2 = \int_{\Omega} | \Delta v(\mathbf{x}) + 1 |^2 d\mathbf{x},
+    \end{equation}
+    which requires second-order derivatives. Subsequently, the dual network is trained via the Principle of Minimum Complementary Energy:
+    \begin{equation}
+        \mathcal{L}_{\text{dual}}(\eta) = \frac{1}{2} \| \mathbf{p} \|^2 = \frac{1}{2} \int_{\Omega} \| \mathbf{p}(\mathbf{x}) \|^2 d\mathbf{x},
+    \end{equation}
+    under the already-enforced constraint $\divg \mathbf{p} = -1$.
+
+    \item \textbf{Hypotenuse (Gap) Training.}
+    We jointly train the primal and dual networks ($v, \mathbf{p}$) by directly minimizing the Hypercircle diameter (Hypotenuse Loss):
+    \begin{equation}
+        \mathcal{L}_{\text{gap}}(\theta, \eta) = \| \nabla v - \mathbf{p} \|^2 = \int_{\Omega} \| \nabla v(\mathbf{x}) - \mathbf{p}(\mathbf{x}) \|^2 d\mathbf{x}.
+    \end{equation}
+    This objective involves only first-order derivatives and naturally couples the primal and dual networks.
+\end{itemize}
+
+\paragraph{Metrics.}
+To quantitatively evaluate the precision and consistency of our method, we report the squared \textbf{Hypercircle energy gap} $G^2$ and its decomposition into the \textbf{primal error} $P^2$ and \textbf{the dual error} $D^2$. These are defined, respectively, as:
+\begin{equation}
+    G^2 := \| \nabla v - \mathbf{p} \|^2, \quad
+    P^2 := \| \nabla v - \nabla u \|^2, \quad
+    D^2 := \| \mathbf{p} - \nabla u \|^2.
+\end{equation}
+Additionally, to verify the numerical satisfaction of the Pythagorean theorem, we monitor the absolute \textbf{identity discrepancy}:
+\begin{equation}
+    \mathcal{E}_{\text{id}} := \left| G^2 - (P^2 + D^2) \right|.
+\end{equation}
+
+\paragraph{Results.}
+On CPU, the proposed Hypotenuse training achieves a much smaller certified gap in substantially less time: $G^2 = 1.84 \times 10^{-6}$ in 45.76s, whereas separate training yields $G^2 = 2.85 \times 10^{-4}$ in 107.22s. Both approaches satisfy the Hypercircle (Pythagorean) identity within sub-percent discrepancy.
+
+\begin{table}[H]
+    \centering
+    \caption{Unit disk results for $-\Delta u=1$ with $u|_{\partial\Omega}=0$ (CPU runs).}
+    \label{tab:disk_results}
+    \begin{tabular}{lrrrrr}
+        \toprule
+        Training Method & Time (s) & $G^2$ & $P^2$ & $D^2$ & $\mathcal{E}_{\text{id}}$ \\
+        \midrule
+        Hypotenuse (Gap)  & 45.76  & $1.84\times 10^{-6}$ & $5.57\times 10^{-7}$ & $1.29\times 10^{-6}$ &  $4.25\times 10^{-9}$\\
+        Separate          & 107.22 & $2.85\times 10^{-4}$ & $6.83\times 10^{-6}$ & $2.78\times 10^{-4}$ & $1.42\times 10^{-7}$ \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+
+\subsection{Results on L-Shaped Domain}
+\label{subsec:lshape_results}
+
+\paragraph{Benchmark Problem Setup.}
+To rigorously validate our method in the presence of singularities, we consider the Poisson problem on an L-shaped domain (a sector with interior angle $3\pi/2$):
+\begin{equation}
+    \Omega := \{(r,\theta) \mid 0 < r < 1,\; 0 < \theta < \tfrac{3\pi}{2}\}.
+\end{equation}
+The governing equation is given by:
+\begin{equation}
+\label{eq:lshape_strong}
+    \begin{cases}
+    -\Delta u = f & \text{in } \Omega, \\
+    u = 0 & \text{on } \partial\Omega.
+    \end{cases}
+\end{equation}
+
+We adopt the specific benchmark configuration described by Liu \cite{liu2023guaranteed} (see p. 10). The source term $f$ is prescribed in polar coordinates as:
+\begin{equation}
+\label{eq:lshape_rhs_f}
+    f(r,\theta) = -\sin\!\left(\tfrac{2}{3}\theta\right)\left( 2r^{2/3} + \frac{14}{3}(r-1)r^{-1/3} \right).
+\end{equation}
+The primary motivation for selecting this specific source term is that it admits a known closed-form exact solution $u$:
+\begin{equation}
+\label{eq:lshape_exact_u}
+    u(r,\theta) = (r-1)^2 r^{2/3}\sin\!\left(\tfrac{2}{3}\theta\right).
+\end{equation}
+Although $u \in H_0^1(\Omega)$, it does not belong to $H^2(\Omega)$ due to the singularity at the re-entrant corner ($r=0$), where the leading-order behavior is $u \sim r^{2/3}$. 
+The availability of this exact solution allows us to explicitly calculate the true primal error $\|\nabla v - \nabla u\|$ and dual error $\|\mathbf{p} - \nabla u\|$, thereby verifying the tightness of our Hypercircle error bound.
+
+\paragraph{Experimental Configuration.}
+We compare two training strategies:
+\begin{enumerate}
+    \item \textbf{Standard Separate Training}: The primal network $v$ is trained to minimize the PDE residual $\|\Delta v + f\|^2$, and the dual network $\mathbf{p}$ is trained independently to minimize the complementary energy $\frac{1}{2}\|\mathbf{p}\|^2$.
+    \item \textbf{Proposed Joint Training}: The primal and dual networks are trained simultaneously to minimize the Hypercircle (Hypotenuse) gap $\|\nabla v - \mathbf{p}\|^2$.
+\end{enumerate}
+For the proposed method, we further investigate the impact of the singularity mask $r^{2/3}$ (as derived in Section 5.2). We report the squared Hypercircle gap (the computable upper bound) alongside the true errors.
+
+\begin{table}[H]
+\centering
+\caption{Quantitative comparison on the L-shaped domain benchmark. The proposed joint training significantly reduces the error bound compared to standard PINN training. The addition of the singularity mask further enhances accuracy by capturing the corner behavior.}
+\label{tab:lshape}
+\renewcommand{\arraystretch}{1.2} % 稍微增加行高，讓表格更好看
+\begin{tabular}{lrrrrr}
+\toprule
+Training Method & Time (s) & $G^2$ & $P^2$ & $D^2$ & $\mathcal{E}_{\text{id}}$ \\
+\midrule
+Separate&
+$501.22$ &
+$1.01\times 10^{-1}$ &
+$9.24\times 10^{-2}$ &
+$8.81\times 10^{-3}$ &
+$1.99\times 10^{-5}$\\
+Hypotenuse,w/o Mask &
+$181.88$ &
+$3.72\times 10^{-3}$ &
+$2.92\times 10^{-3}$ &
+$8.94\times 10^{-4}$ &
+$8.99\times 10^{-5}$\\
+Hypotenuse,w/ Mask &
+$191.54$ &
+$1.13\times 10^{-3}$ &
+$4.03\times 10^{-4}$ &
+$7.28\times 10^{-4}$ &
+$7.24\times 10^{-7}$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Discussion.}
+The results in Table \ref{tab:lshape} demonstrate the effectiveness of the proposed framework. 
+First, switching from standard separate training to joint Hypercircle training reduces the certified error bound ($\text{Gap}^2$) from $1.01\times 10^{-1}$ to $3.72\times 10^{-3}$, representing a roughly \textbf{27-fold improvement}. This confirms that minimizing the distance between primal and dual fields effectively drives both towards the exact solution.
+
+Second, incorporating the $r^{2/3}$ singularity mask yields further gains. The $\text{Gap}^2$ is reduced to $1.13\times 10^{-3}$, and the true primal error drops significantly from $2.92\times 10^{-3}$ to $4.03\times 10^{-4}$ (a \textbf{7.2-fold improvement} over the unmasked joint model). This validates that explicitly enriching the trial space with the theoretical singularity term allows the network to approximate the solution's behavior near the re-entrant corner much more efficiently.
+
+% --------------------------------------------------
+% 7. Conclusion
+% --------------------------------------------------
+% --------------------------------------------------
+% 7. Conclusion
+% --------------------------------------------------
+\section{Conclusion}
+
+In this work, we have presented a robust deep learning framework that addresses the critical lack of error certification in standard Physics-Informed Neural Networks (PINNs). By revisiting the classical Prager-Synge Hypercircle theorem, we successfully established a method to provide \textbf{strict, computable \textit{a posteriori} error bounds} for the Poisson equation, entirely independent of the exact solution.
+
+Our contribution is threefold. First, we **strategically integrated** strictly admissible neural architectures into the Hypercircle framework. By **leveraging** distance masks for kinematic admissibility and curl operators for static admissibility, we ensured that the neural approximations strictly reside within the required function spaces. This valid construction is the prerequisite that enables the rigorous application of the Hypercircle identity.
+
+Second, we introduced the \textbf{Hypotenuse Loss} as a unified training objective. By minimizing the hypercircle diameter $\|\nabla v - \mathbf{p}\|^2$, we achieved a rigorous upper bound on the true error while significantly improving computational efficiency. Our numerical experiments demonstrated that this first-order objective converges faster and more strictly than the standard second-order PDE residual minimization, effectively mitigating the spectral bias associated with higher-order derivatives.
+
+Third, we demonstrated the efficacy of **incorporating classical asymptotic theory** to handle geometric singularities. In the L-shaped benchmark, we showed that standard neural networks struggle to capture the corner singularity. By explicitly enriching the ansatz space with the theoretical singular basis ($r^{2/3}$), we reduced the certified error gap by over 27-fold compared to standard baselines. This confirms that **embedding domain-specific analytical knowledge** into the Hypercircle training loop is essential for high-fidelity simulation in non-smooth domains.
+
+Future work will focus on extending this framework to three-dimensional problems, where the construction of divergence-free fields involves more complex vector potentials, and to other physics regimes such as linear elasticity and Maxwell's equations. Additionally, the localized nature of the hypercircle error estimator suggests a promising avenue for adaptive network refinement, allocating neurons specifically to regions with high local error contribution.
+
+% --------------------------------------------------
+% References
+% --------------------------------------------------
+\bibliographystyle{unsrt}  % 或其他格式，如 ieeetr, unsrt, apalike
+\bibliography{ref}         % 不需要加 .bib 副檔名
+
+\appendix
+
+\section{Code Availability}
+The complete training and evaluation code used in this thesis is publicly available on GitHub:
+
+\begin{itemize}
+  \item Repository: \url{https://github.com/ShengYaooo/Strict-Error-Control-in-Physics-Informed-Neural-Networks-via-the-Hypercircle-Method}
+  \item Commit (reproducible version): \texttt{<727e802f40fde4949b306e1755f14da64c69bf87>}
+  \item Environment: see \texttt{requirements.txt} in the repository.
+\end{itemize}
+
+
+\end{document}
